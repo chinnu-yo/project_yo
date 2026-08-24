@@ -1,0 +1,53 @@
+# ==========================================
+# 1. Environment & Secrets (NEVER COMMIT)
+# ==========================================
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.cert
+secrets.json
+
+# ==========================================
+# 2. Python / FastAPI Backend
+# ==========================================
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+venv/
+ENV/
+env.bak/
+venv.bak/
+.venv/
+.pytest_cache/
+.coverage
+htmlcov/
+*.log
+
+# ==========================================
+# 3. Node.js / Next.js Frontend
+# ==========================================
+node_modules/
+.next/
+out/
+build/
+dist/
+.pnpm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+npm-debug.log*
+
+# ==========================================
+# 4. Antigravity / AI Workflows & IDE Config
+# ==========================================
+# Keep context docs (.agent/, project.md, etc.), ignore IDE state
+.idea/
+.vscode/
+*.swp
+*.swo
+.DS_Store
+Thumbs.db
