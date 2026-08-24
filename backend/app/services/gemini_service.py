@@ -1,19 +1,65 @@
-"""Gemini LLM Integration Service using google-genai SDK for candidate gap analysis."""
+"""Gemini LLM Integration Service using google-genai SDK with dynamic resource link construction."""
 
 import json
 import logging
+import urllib.parse
 from typing import Dict, Any, List
 from app.core.config import settings
 from app.schemas.audit import AuditAnalyzeResponse, GapItem, RecommendedSprint, SprintMilestone
 
 logger = logging.getLogger(__name__)
 
+# Static dictionary of top-level official documentation homepages
+OFFICIAL_DOCS_DOMAINS = {
+    "fastapi": "https://fastapi.tiangolo.com",
+    "flask": "https://flask.palletsprojects.com",
+    "django": "https://docs.djangoproject.com",
+    "pytest": "https://docs.pytest.org",
+    "sqlalchemy": "https://docs.sqlalchemy.org",
+    "pydantic": "https://docs.pydantic.dev",
+    "docker": "https://docs.docker.com",
+    "redis": "https://redis.io/docs/",
+    "go": "https://go.dev/doc/",
+    "golang": "https://go.dev/doc/",
+    "gin": "https://gin-gonic.com/docs/",
+    "react": "https://react.dev",
+    "next": "https://nextjs.org/docs",
+    "typescript": "https://www.typescriptlang.org/docs/",
+    "python": "https://docs.python.org/3/",
+    "postgres": "https://www.postgresql.org/docs/",
+}
+
+
+def format_resource_url(search_query: str, resource_type: str) -> str:
+    """Construct dynamic, high-quality search or official documentation URLs."""
+    encoded_query = urllib.parse.quote_plus(search_query.strip())
+    res_type = resource_type.lower().strip()
+
+    if res_type == "youtube":
+        return f"https://www.youtube.com/results?search_query={encoded_query}"
+    
+    if res_type == "freecodecamp":
+        return f"https://www.freecodecamp.org/news/search/?query={encoded_query}"
+
+    if res_type == "official_docs":
+        # Check if search query mentions a specific domain in our dictionary
+        query_lower = search_query.lower()
+        for tech_key, domain_url in OFFICIAL_DOCS_DOMAINS.items():
+            if tech_key in query_lower:
+                return domain_url
+        
+        # Fallback to targeted Google search for official documentation
+        return f"https://www.google.com/search?q={encoded_query}+official+docs"
+
+    # Default fallback
+    return f"https://www.google.com/search?q={encoded_query}"
+
 
 class GeminiService:
     """Service to evaluate candidate repository signals against target job rubrics using Gemini LLM."""
 
     def __init__(self):
-        self.model_name = "gemini-2.5-flash"  # Free-tier model identifier per agent_instructions.md
+        self.model_name = "gemini-2.5-flash"
 
     def _build_prompt(
         self,
@@ -24,28 +70,31 @@ class GeminiService:
     ) -> str:
         """Construct deterministic structured prompt for Gemini."""
         return f"""
-You are an expert technical interviewer and engineering lead evaluating a candidate's readiness for the role: '{target_role}' at a '{company_tier}' tier company.
+You are an expert technical interviewer evaluating candidate code signals for the target role: '{target_role}' at a '{company_tier}' tier company.
 
 Candidate GitHub Code Signals:
-- Repositories Count: {signals.get('total_repos', 0)}
+- Total Repositories: {signals.get('total_repos', 0)}
 - Primary Languages: {', '.join(signals.get('primary_languages', []))}
-- Unit Tests Detected: {signals.get('has_unit_tests', False)}
-- Docker / Containerization Detected: {signals.get('has_docker', False)}
-- Caching Detected: {signals.get('has_caching', False)}
-- Frameworks / Libraries: {', '.join(signals.get('detected_frameworks', []))}
-- Repositories Breakdown: {json.dumps(signals.get('repos_analyzed', []), indent=2)}
+- Detected Technologies & Frameworks: {', '.join(signals.get('detected_technologies', []))}
+- Unit Tests Present: {signals.get('has_unit_tests', False)}
+- Docker / Containerization Present: {signals.get('has_docker', False)}
+- README Documentation Present: {signals.get('has_readme', False)}
+- Caching Layer Present: {signals.get('has_caching', False)}
+- Commit Recency: {signals.get('commit_recency', 'recent')}
 
-Task:
-Perform a gap analysis comparing the candidate's code signals against industry expectations for '{target_role}'.
-Create a concise, actionable {sprint_duration_days}-day sprint plan to bridge the candidate's technical gaps.
+Scoring Rules & Evaluation Guidelines:
+1. FAIR BASE SCORING: For candidates with active repositories and functional code logic, maintain a realistic baseline score between 50 and 70 (out of 100) instead of harshly dropping below 30.
+2. ACKNOWLEDGE PROVEN TECH: If 'Detected Technologies & Frameworks' already includes frameworks relevant to '{target_role}' (e.g. FastAPI/Flask for Python backend, Gin/Go for Go backend, React/Next for frontend), DO NOT report missing framework experience.
+3. ISOLATED GAPS: Categorize missing README files under 'Documentation & Maintenance' and missing unit tests under 'Testing Practices'.
+4. RESOURCE FORMATTING: For each milestone step, provide a concise 'search_query' and a 'resource_type' ('youtube', 'freecodecamp', or 'official_docs').
 
 Return ONLY a valid JSON object matching this exact schema:
 {{
-  "readiness_score": int (0 to 100),
+  "readiness_score": int (50 to 95),
   "top_strengths": ["string"],
   "detected_gaps": [
     {{
-      "category": "string",
+      "category": "Documentation & Maintenance" | "Testing Practices" | "Caching & Architecture" | "DevOps & Infrastructure",
       "issue": "string",
       "severity": "HIGH" | "MEDIUM" | "LOW"
     }}
@@ -57,7 +106,8 @@ Return ONLY a valid JSON object matching this exact schema:
         "step": 1,
         "title": "string",
         "description": "string",
-        "resource_url": "string"
+        "search_query": "string",
+        "resource_type": "youtube" | "freecodecamp" | "official_docs"
       }}
     ]
   }}
@@ -73,7 +123,6 @@ Return ONLY a valid JSON object matching this exact schema:
     ) -> AuditAnalyzeResponse:
         """Perform candidate gap analysis using Gemini LLM or dynamic fallback rule-engine."""
         
-        # If API Key is present, attempt live Gemini SDK call
         if settings.GEMINI_API_KEY and settings.GEMINI_API_KEY.strip():
             try:
                 from google import genai
@@ -90,11 +139,39 @@ Return ONLY a valid JSON object matching this exact schema:
                 
                 if response and response.text:
                     parsed_json = json.loads(response.text)
-                    return AuditAnalyzeResponse(**parsed_json)
+                    
+                    # Convert search_query and resource_type into formatted resource_url
+                    milestones = []
+                    sprint_data = parsed_json.get("recommended_sprint", {})
+                    for raw_m in sprint_data.get("milestones", []):
+                        search_q = raw_m.get("search_query") or f"{raw_m.get('title', '')} tutorial"
+                        res_t = raw_m.get("resource_type") or "official_docs"
+                        url = format_resource_url(search_q, res_t)
+                        
+                        milestones.append(
+                            SprintMilestone(
+                                step=raw_m.get("step", 1),
+                                title=raw_m.get("title", ""),
+                                description=raw_m.get("description", ""),
+                                resource_url=url
+                            )
+                        )
+
+                    gaps = [GapItem(**g) for g in parsed_json.get("detected_gaps", [])]
+
+                    return AuditAnalyzeResponse(
+                        readiness_score=max(45, min(95, parsed_json.get("readiness_score", 65))),
+                        top_strengths=parsed_json.get("top_strengths", []),
+                        detected_gaps=gaps,
+                        recommended_sprint=RecommendedSprint(
+                            title=sprint_data.get("title", f"{target_role.title()} Sprint Plan"),
+                            milestones=milestones
+                        )
+                    )
             except Exception as e:
                 logger.warning(f"Gemini API call failed or fallback triggered: {e}. Executing rule-engine analysis.")
 
-        # Deterministic Rule Engine Fallback when Gemini API key is missing or call fails
+        # Signal-driven fallback rule engine
         return self._generate_rule_based_analysis(signals, target_role, company_tier, sprint_duration_days)
 
     def _generate_rule_based_analysis(
@@ -104,88 +181,94 @@ Return ONLY a valid JSON object matching this exact schema:
         company_tier: str,
         sprint_duration_days: int
     ) -> AuditAnalyzeResponse:
-        """Deterministic signal-driven fallback gap analysis."""
-        score = 65
+        """Deterministic signal-driven fallback gap analysis with fair scoring baseline."""
+        score = 68
         strengths = []
         gaps = []
         milestones = []
 
-        if signals.get("total_repos", 0) > 0:
-            strengths.append("Active repository presence and clean directory structure")
-        
-        langs = signals.get("primary_languages", [])
-        if langs:
-            strengths.append(f"Demonstrated proficiency in {', '.join(langs)}")
+        detected_tech = signals.get("detected_technologies", [])
 
-        # Check testing gap
+        # 1. Acknowledge proven tech & repos
+        if signals.get("total_repos", 0) > 0:
+            strengths.append(f"Active repository presence ({signals.get('total_repos')} repos)")
+        
+        if detected_tech:
+            strengths.append(f"Proven stack experience in {', '.join(detected_tech[:5])}")
+
+        # 2. Check README documentation
+        if not signals.get("has_readme", False):
+            gaps.append(
+                GapItem(
+                    category="Documentation & Maintenance",
+                    issue="Missing comprehensive README documentation for repository setup and architecture.",
+                    severity="MEDIUM"
+                )
+            )
+            score -= 5
+
+        # 3. Check unit testing
         if not signals.get("has_unit_tests", False):
             gaps.append(
                 GapItem(
-                    category="Testing",
-                    issue="No unit or integration test files found across primary repositories.",
+                    category="Testing Practices",
+                    issue="No unit or integration test suites found in primary repositories.",
                     severity="HIGH"
                 )
             )
-            score -= 15
+            score -= 10
+            
+            search_q = f"{target_role.replace('_', ' ')} testing tutorial"
             milestones.append(
                 SprintMilestone(
                     step=len(milestones) + 1,
-                    title="Add Integration Tests",
-                    description=f"Write comprehensive unit and integration tests covering primary handlers for {target_role}.",
-                    resource_url="https://pytest.org" if "Python" in str(langs) else "https://go.dev/doc/tutorial/add-a-test"
+                    title="Add Unit & Integration Test Suite",
+                    description=f"Write automated unit tests covering key business logic and API endpoints for {target_role}.",
+                    resource_url=format_resource_url(search_q, "official_docs")
                 )
             )
         else:
-            strengths.append("Unit test suites present in project repositories")
+            strengths.append("Automated unit test coverage present")
 
-        # Check caching / DB gap for backend roles
+        # 4. Check caching / architecture for backend roles
         if "backend" in target_role.lower():
             if not signals.get("has_caching", False):
                 gaps.append(
                     GapItem(
-                        category="Caching",
-                        issue="Missing in-memory caching layer (Redis) for database read operations.",
+                        category="Caching & Architecture",
+                        issue="Missing in-memory caching layer (Redis) for high-frequency database read ops.",
                         severity="MEDIUM"
                     )
                 )
-                score -= 10
+                score -= 8
+                
                 milestones.append(
                     SprintMilestone(
                         step=len(milestones) + 1,
-                        title="Implement Redis Caching",
-                        description="Wrap high-frequency database GET requests with a Redis caching layer.",
-                        resource_url="https://redis.io/docs/manual/client-side-caching/"
+                        title="Implement Redis Caching Layer",
+                        description="Wrap frequent database query endpoints with a Redis caching lookup pattern.",
+                        resource_url=format_resource_url("Redis caching tutorial", "official_docs")
                     )
                 )
-
-        # Check containerization
-        if not signals.get("has_docker", False):
-            gaps.append(
-                GapItem(
-                    category="DevOps & Deployment",
-                    issue="Missing Dockerfile / containerization setup for reproducible production deployment.",
-                    severity="LOW"
-                )
-            )
 
         if not milestones:
             milestones.append(
                 SprintMilestone(
                     step=1,
-                    title="CI/CD Pipeline Setup",
-                    description="Set up GitHub Actions workflow for automated test execution and linting.",
-                    resource_url="https://docs.github.com/en/actions"
+                    title="CI/CD GitHub Actions Pipeline",
+                    description="Configure automated test execution and linting on pull requests.",
+                    resource_url=format_resource_url("GitHub actions CI CD tutorial", "freecodecamp")
                 )
             )
 
-        final_score = max(30, min(95, score))
+        final_score = max(50, min(95, score))
 
         return AuditAnalyzeResponse(
             readiness_score=final_score,
             top_strengths=strengths if strengths else ["Basic git workflow setup"],
             detected_gaps=gaps,
             recommended_sprint=RecommendedSprint(
-                title=f"{target_role.replace('_', ' ').title()} Production Refactor & Test Suite",
+                title=f"{target_role.replace('_', ' ').title()} Production Refactor Sprint",
                 milestones=milestones
             )
         )
