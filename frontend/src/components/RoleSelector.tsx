@@ -210,20 +210,20 @@ export default function RoleSelector({
             <div className="space-y-2">
               <label className="text-xs font-mono font-bold uppercase tracking-wider text-emerald-400 flex items-center gap-2">
                 <Key className="w-3.5 h-3.5" />
-                <span>GitHub OAuth / Access Token</span>
+                <span>GitHub Connection Status</span>
               </label>
-              <input
-                type="text"
-                value={githubToken}
-                onChange={(e) => setGithubToken(e.target.value)}
-                placeholder="gho_xxxxxxxxxxxx"
-                className="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-2.5 text-sm text-slate-200 placeholder-slate-600 focus:outline-none focus:border-emerald-500 transition-colors font-mono"
-                required
-              />
+              {githubToken ? (
+                <div className="w-full bg-slate-950/80 border border-emerald-500/30 rounded-xl px-4 py-2.5 text-sm text-emerald-400 font-medium flex items-center gap-2 font-mono">
+                  <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
+                  <span>✓ GitHub Account Connected</span>
+                </div>
+              ) : (
+                <div className="w-full bg-slate-950/80 border border-amber-500/30 rounded-xl px-4 py-2.5 text-sm text-amber-400 font-medium flex items-center gap-2 font-mono">
+                  <span>GitHub Account Not Connected</span>
+                </div>
+              )}
               <p className="text-[11px] text-slate-500">
-                {activeGithubToken
-                  ? 'Auto-populated from active GitHub OAuth session.'
-                  : 'Token is used strictly to read public repo structures & commits.'}
+                Secure session active. Token is used strictly to read public repo structures & commits.
               </p>
             </div>
           </div>

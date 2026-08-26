@@ -19,6 +19,8 @@ class Settings(BaseSettings):
     GITHUB_CLIENT_ID: Optional[str] = None
     GITHUB_CLIENT_SECRET: Optional[str] = None
 
+    ALLOWED_ORIGINS: list[str] = ["http://localhost:3000", "https://*.vercel.app"]
+
     model_config = SettingsConfigDict(
         env_file=".env",
         env_file_encoding="utf-8",
