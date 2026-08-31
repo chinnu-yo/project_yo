@@ -5,11 +5,12 @@ import {
   ShieldCheck, 
   AlertTriangle, 
   CheckCircle2, 
-  Zap, 
   ArrowRight, 
   RotateCcw,
   Sparkles,
-  Layers
+  Layers,
+  Info,
+  FolderGit2
 } from 'lucide-react';
 import { AuditAnalyzeResponse, GapItem } from '@/lib/api';
 
@@ -17,6 +18,7 @@ interface GapReportViewProps {
   report: AuditAnalyzeResponse;
   targetRole: string;
   onProceedToSprint: () => void;
+  onViewProjects?: () => void;
   onReset: () => void;
 }
 
@@ -24,6 +26,7 @@ export default function GapReportView({
   report,
   targetRole,
   onProceedToSprint,
+  onViewProjects,
   onReset,
 }: GapReportViewProps) {
   const getSeverityBadge = (severity: string) => {
@@ -56,7 +59,7 @@ export default function GapReportView({
   };
 
   return (
-    <div className="w-full max-w-4xl mx-auto space-y-8">
+    <div className="w-full max-w-4xl mx-auto space-y-8 animate-in fade-in duration-300">
       {/* Top Banner Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 p-6 rounded-2xl bg-slate-900/60 border border-slate-800 backdrop-blur">
         <div>
@@ -67,12 +70,22 @@ export default function GapReportView({
             Role Gap Report: <span className="text-emerald-400 font-mono">{targetRole}</span>
           </h2>
         </div>
-        <button
-          onClick={onReset}
-          className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-mono transition-colors border border-slate-700 self-start sm:self-auto"
-        >
-          <RotateCcw className="w-3.5 h-3.5" /> Re-audit
-        </button>
+        <div className="flex items-center gap-3">
+          {onViewProjects && (
+            <button
+              onClick={onViewProjects}
+              className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-teal-500/10 hover:bg-teal-500/20 text-teal-300 text-xs font-mono transition-colors border border-teal-500/30 self-start sm:self-auto"
+            >
+              <FolderGit2 className="w-3.5 h-3.5" /> Recommended Projects
+            </button>
+          )}
+          <button
+            onClick={onReset}
+            className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-mono transition-colors border border-slate-700 self-start sm:self-auto"
+          >
+            <RotateCcw className="w-3.5 h-3.5" /> Re-audit
+          </button>
+        </div>
       </div>
 
       {/* Main Stats Grid */}
@@ -82,6 +95,15 @@ export default function GapReportView({
           <div className="flex items-center gap-2 text-slate-400 text-xs font-mono uppercase tracking-wider mb-4">
             <ShieldCheck className="w-4 h-4 text-emerald-400" />
             <span>360° Readiness Index</span>
+            
+            {/* Hover Tooltip */}
+            <div className="relative group/tooltip flex items-center">
+              <Info className="w-3.5 h-3.5 text-slate-500 hover:text-emerald-400 cursor-help transition-colors" />
+              <div className="absolute left-1/2 -translate-x-1/2 bottom-full mb-2 hidden group-hover/tooltip:block w-64 p-3 bg-slate-900 border border-slate-700 text-[11px] font-sans text-slate-200 rounded-xl shadow-2xl z-50 pointer-events-none text-left">
+                Calculated dynamically by analyzing test suite coverage, containerization, documentation, and architecture signals against tier benchmark rubrics.
+                <div className="absolute top-full left-1/2 -translate-x-1/2 border-4 border-transparent border-t-slate-700" />
+              </div>
+            </div>
           </div>
 
           <div
@@ -105,10 +127,21 @@ export default function GapReportView({
         {/* Top Strengths Card */}
         <div className="md:col-span-2 p-6 rounded-2xl bg-slate-900/60 border border-slate-800 flex flex-col justify-between">
           <div>
-            <h3 className="text-sm font-mono font-bold uppercase tracking-wider text-emerald-400 flex items-center gap-2 mb-4">
-              <CheckCircle2 className="w-4 h-4" />
-              <span>Verified Code Strengths</span>
-            </h3>
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-sm font-mono font-bold uppercase tracking-wider text-emerald-400 flex items-center gap-2">
+                <CheckCircle2 className="w-4 h-4" />
+                <span>Verified Code Strengths</span>
+                
+                {/* Hover Tooltip */}
+                <div className="relative group/tooltip flex items-center">
+                  <Info className="w-3.5 h-3.5 text-slate-500 hover:text-emerald-400 cursor-help transition-colors" />
+                  <div className="absolute left-1/2 -translate-x-1/2 bottom-full mb-2 hidden group-hover/tooltip:block w-64 p-3 bg-slate-900 border border-slate-700 text-[11px] font-sans text-slate-200 rounded-xl shadow-2xl z-50 pointer-events-none text-left">
+                    Ground-truth code signals explicitly verified in your connected GitHub repositories.
+                    <div className="absolute top-full left-1/2 -translate-x-1/2 border-4 border-transparent border-t-slate-700" />
+                  </div>
+                </div>
+              </h3>
+            </div>
 
             <div className="space-y-2.5">
               {report.top_strengths.map((strength, idx) => (

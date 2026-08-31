@@ -30,7 +30,21 @@ class SprintService:
             total_steps = max(2, request.milestone_step)
             progress_pct = int((request.milestone_step / total_steps) * 100)
             status_str = "VERIFIED"
-            message_str = f"PR verified successfully. Milestone {request.milestone_step} complete."
+
+            # Determine resolved gap category and calculate score boost
+            step_num = request.milestone_step
+            if step_num == 1:
+                resolved_gap = "Testing Practices"
+                score_boost = 10
+            elif step_num == 2:
+                resolved_gap = "Caching & Architecture"
+                score_boost = 8
+            else:
+                resolved_gap = "DevOps & Infrastructure"
+                score_boost = 5
+
+            recalculated_score = min(98, 65 + (step_num * score_boost))
+            message_str = f"PR verified successfully! {resolved_gap} resolved. Recalibrated score: {recalculated_score}."
 
             # Update database record in Supabase
             await db_service.update_sprint_step(
@@ -44,12 +58,15 @@ class SprintService:
             return VerifyStepResponse(
                 status=status_str,
                 message=message_str,
-                sprint_progress_pct=min(100, progress_pct)
+                sprint_progress_pct=min(100, progress_pct),
+                recalculated_score=recalculated_score,
+                resolved_gap=resolved_gap
             )
         else:
+            err_msg = pr_verification.get("error") or "Invalid or non-existent GitHub Pull Request URL."
             return VerifyStepResponse(
                 status="FAILED",
-                message="Unable to verify PR submission. Please ensure PR is open or merged.",
+                message=err_msg,
                 sprint_progress_pct=0
             )
 

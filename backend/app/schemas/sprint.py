@@ -15,9 +15,13 @@ class VerifyStepRequest(BaseModel):
     )
 
 
+from typing import Optional
+
 class VerifyStepResponse(BaseModel):
     """Response payload for sprint step verification."""
     
     status: str = Field(..., description="Verification status: 'VERIFIED', 'PENDING', or 'FAILED'")
     message: str = Field(..., description="Detailed verification result message")
     sprint_progress_pct: int = Field(..., description="Updated sprint completion percentage", ge=0, le=100)
+    recalculated_score: Optional[int] = Field(None, description="Updated readiness index score after gap resolution")
+    resolved_gap: Optional[str] = Field(None, description="Category of the gap resolved by this step")

@@ -51,6 +51,17 @@ class RecommendedSprint(BaseModel):
     milestones: List[SprintMilestone] = Field(default_factory=list, description="Ordered list of milestone steps")
 
 
+class ProjectRecommendation(BaseModel):
+    """Recommended resume/portfolio project addressing detected gaps."""
+    
+    id: str = Field(..., description="Unique project identifier", example="proj_1")
+    title: str = Field(..., description="Short enterprise-grade project title", example="Distributed Event Rate Limiter")
+    description: str = Field(..., description="2-sentence problem statement", example="Prevents API abuse and token bucket exhaustion across microservices. Implements sliding window rate limiting with Redis.")
+    tech_stack: List[str] = Field(default_factory=list, description="Array of string tags for recommended stack", example=["FastAPI", "Redis", "Docker", "PyTest"])
+    key_features: List[str] = Field(default_factory=list, description="Bulleted list of 3 core micro-features")
+    portfolio_impact: str = Field(..., description="1-sentence resume value proposition", example="Demonstrates production concurrency control and distributed caching experience.")
+
+
 class AuditAnalyzeResponse(BaseModel):
     """Response payload for repository audit analysis."""
     
@@ -58,3 +69,7 @@ class AuditAnalyzeResponse(BaseModel):
     top_strengths: List[str] = Field(default_factory=list, description="Key candidate code strengths")
     detected_gaps: List[GapItem] = Field(default_factory=list, description="Identified technical gaps")
     recommended_sprint: RecommendedSprint = Field(..., description="Tailored 48h to 7d sprint plan")
+    recommended_projects: List[ProjectRecommendation] = Field(
+        default_factory=list,
+        description="Curated high-impact portfolio projects targeting detected gaps"
+    )

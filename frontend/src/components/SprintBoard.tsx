@@ -9,7 +9,9 @@ import {
   Award, 
   AlertCircle,
   Loader2,
-  Sparkles
+  Sparkles,
+  Info,
+  TrendingUp
 } from 'lucide-react';
 import { RecommendedSprint, verifySprintStep } from '@/lib/api';
 
@@ -24,17 +26,27 @@ export default function SprintBoard({
   sprintId = 'sp_12345',
   onBackToReport,
 }: SprintBoardProps) {
-  const [evidenceUrls, setEvidenceUrls] = useState<Record<number, string>>({
-    1: 'https://github.com/candidate/sample-backend-service/pull/1',
-  });
+  const [evidenceUrls, setEvidenceUrls] = useState<Record<number, string>>({});
   const [verifyingStep, setVerifyingStep] = useState<number | null>(null);
   const [verifiedSteps, setVerifiedSteps] = useState<Record<number, boolean>>({});
-  const [progressPct, setProgressPct] = useState(0);
   const [messages, setMessages] = useState<Record<number, string>>({});
+  const [recalculatedScores, setRecalculatedScores] = useState<Record<number, number>>({});
+  const [resolvedGaps, setResolvedGaps] = useState<Record<number, string>>({});
+  const [failedSteps, setFailedSteps] = useState<Record<number, boolean>>({});
+
+  const totalMilestonesCount = sprint.milestones ? sprint.milestones.length : 0;
+  const completedMilestonesCount = sprint.milestones
+    ? sprint.milestones.filter((m) => verifiedSteps[m.step]).length
+    : 0;
+  const progressPct =
+    totalMilestonesCount > 0
+      ? Math.round((completedMilestonesCount / totalMilestonesCount) * 100)
+      : 0;
 
   const handleVerifyStep = async (stepNumber: number) => {
     const evidenceUrl = evidenceUrls[stepNumber] || '';
     if (!evidenceUrl.trim()) {
+      setFailedSteps((prev) => ({ ...prev, [stepNumber]: true }));
       setMessages((prev) => ({
         ...prev,
         [stepNumber]: 'Please provide a valid GitHub Pull Request URL.',
@@ -43,6 +55,7 @@ export default function SprintBoard({
     }
 
     setVerifyingStep(stepNumber);
+    setFailedSteps((prev) => ({ ...prev, [stepNumber]: false }));
     setMessages((prev) => ({ ...prev, [stepNumber]: '' }));
 
     try {
@@ -54,15 +67,26 @@ export default function SprintBoard({
 
       if (response.status === 'VERIFIED') {
         setVerifiedSteps((prev) => ({ ...prev, [stepNumber]: true }));
-        setProgressPct(response.sprint_progress_pct);
+        setFailedSteps((prev) => ({ ...prev, [stepNumber]: false }));
         setMessages((prev) => ({ ...prev, [stepNumber]: response.message }));
+        if (response.recalculated_score) {
+          setRecalculatedScores((prev) => ({ ...prev, [stepNumber]: response.recalculated_score! }));
+        }
+        if (response.resolved_gap) {
+          setResolvedGaps((prev) => ({ ...prev, [stepNumber]: response.resolved_gap! }));
+        }
       } else {
-        setMessages((prev) => ({ ...prev, [stepNumber]: response.message }));
+        setFailedSteps((prev) => ({ ...prev, [stepNumber]: true }));
+        setMessages((prev) => ({
+          ...prev,
+          [stepNumber]: response.message || 'Invalid or non-existent GitHub Pull Request URL.',
+        }));
       }
     } catch (err: any) {
+      setFailedSteps((prev) => ({ ...prev, [stepNumber]: true }));
       setMessages((prev) => ({
         ...prev,
-        [stepNumber]: err.message || 'Verification failed.',
+        [stepNumber]: err.message || 'Invalid or non-existent GitHub Pull Request URL.',
       }));
     } finally {
       setVerifyingStep(null);
@@ -133,9 +157,12 @@ export default function SprintBoard({
       <div className="space-y-6">
         {sprint.milestones.map((milestone) => {
           const isVerified = verifiedSteps[milestone.step];
+          const isFailed = failedSteps[milestone.step];
           const isVerifying = verifyingStep === milestone.step;
           const currentUrl = evidenceUrls[milestone.step] || '';
           const msg = messages[milestone.step];
+          const recScore = recalculatedScores[milestone.step];
+          const resGap = resolvedGaps[milestone.step];
 
           return (
             <div
@@ -143,6 +170,8 @@ export default function SprintBoard({
               className={`p-6 rounded-2xl border transition-all ${
                 isVerified
                   ? 'bg-emerald-950/10 border-emerald-500/40 shadow-[0_0_15px_rgba(16,185,129,0.1)]'
+                  : isFailed
+                  ? 'bg-rose-950/10 border-rose-500/40'
                   : 'bg-slate-900/60 border-slate-800'
               }`}
             >
@@ -152,6 +181,8 @@ export default function SprintBoard({
                     className={`w-9 h-9 rounded-xl flex items-center justify-center font-mono font-bold text-sm shrink-0 ${
                       isVerified
                         ? 'bg-emerald-500 text-slate-950 shadow-[0_0_15px_rgba(16,185,129,0.4)]'
+                        : isFailed
+                        ? 'bg-rose-500/20 text-rose-400 border border-rose-500/40'
                         : 'bg-slate-800 text-slate-300 border border-slate-700'
                     }`}
                   >
@@ -194,6 +225,15 @@ export default function SprintBoard({
                 <label className="text-xs font-mono text-slate-400 flex items-center gap-2">
                   <GitPullRequest className="w-3.5 h-3.5 text-emerald-400" />
                   <span>Submit GitHub Pull Request Evidence URL</span>
+                  
+                  {/* Hover Tooltip */}
+                  <div className="relative group/tooltip flex items-center">
+                    <Info className="w-3.5 h-3.5 text-slate-500 hover:text-emerald-400 cursor-help transition-colors" />
+                    <div className="absolute left-1/2 -translate-x-1/2 bottom-full mb-2 hidden group-hover/tooltip:block w-64 p-3 bg-slate-900 border border-slate-700 text-[11px] font-sans text-slate-200 rounded-xl shadow-2xl z-50 pointer-events-none text-left">
+                      Submit your open or merged GitHub Pull Request URL containing the milestone code implementation to verify proof of work.
+                      <div className="absolute top-full left-1/2 -translate-x-1/2 border-4 border-transparent border-t-slate-700" />
+                    </div>
+                  </div>
                 </label>
 
                 <div className="flex flex-col sm:flex-row items-center gap-3">
@@ -235,19 +275,30 @@ export default function SprintBoard({
                   </button>
                 </div>
 
+                {/* Inline Message Banner */}
                 {msg && (
-                  <p
-                    className={`text-xs font-mono flex items-center gap-1.5 mt-2 ${
-                      isVerified ? 'text-emerald-400' : 'text-amber-400'
+                  <div
+                    className={`p-3 rounded-xl border text-xs font-mono flex items-start gap-2.5 ${
+                      isVerified
+                        ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-300'
+                        : 'bg-rose-500/10 border-rose-500/30 text-rose-300'
                     }`}
                   >
                     {isVerified ? (
-                      <CheckCircle2 className="w-3.5 h-3.5 shrink-0" />
+                      <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0 mt-0.5" />
                     ) : (
-                      <AlertCircle className="w-3.5 h-3.5 shrink-0" />
+                      <AlertCircle className="w-4 h-4 text-rose-400 shrink-0 mt-0.5" />
                     )}
-                    <span>{msg}</span>
-                  </p>
+                    <div className="space-y-1">
+                      <p>{msg}</p>
+                      {recScore && (
+                        <div className="inline-flex items-center gap-1.5 text-[11px] text-teal-300 font-bold bg-slate-950 px-2.5 py-0.5 rounded border border-teal-500/30">
+                          <TrendingUp className="w-3 h-3 text-teal-400" />
+                          <span>Dynamic 360° Readiness Index: {recScore}/100</span>
+                        </div>
+                      )}
+                    </div>
+                  </div>
                 )}
               </div>
             </div>

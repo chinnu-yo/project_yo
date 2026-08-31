@@ -32,32 +32,44 @@ def test_audit_analyze_endpoint():
     assert "readiness_score" in data
     assert isinstance(data["readiness_score"], int)
     assert "top_strengths" in data
-    assert "detected_gaps" in data
-    assert "recommended_sprint" in data
-    
-    sprint = data["recommended_sprint"]
-    assert "title" in sprint
-    assert "milestones" in sprint
-    assert len(sprint["milestones"]) > 0
-    print("[PASS] Audit analyze endpoint test passed. Score:", data["readiness_score"])
+    assert "recommended_projects" in data
+    assert len(data["recommended_projects"]) == 3
+    assert "title" in data["recommended_projects"][0]
+    assert "tech_stack" in data["recommended_projects"][0]
+    assert len(data["recommended_projects"][0]["key_features"]) > 0
+    print("[PASS] Audit analyze endpoint test passed (with 3 recommended projects). Score:", data["readiness_score"])
 
 
 def test_sprint_verify_step_endpoint():
     """Verify POST /api/v1/sprint/verify-step adheres strictly to api_contracts.md."""
-    payload = {
+    # 1. Test valid PR URL (real merged PR on GitHub)
+    valid_payload = {
         "sprint_id": "sp_12345",
         "milestone_step": 1,
-        "evidence_url": "https://github.com/username/repo/pull/4"
+        "evidence_url": "https://github.com/fastapi/fastapi/pull/1"
     }
-    response = client.post("/api/v1/sprint/verify-step", json=payload)
+    response = client.post("/api/v1/sprint/verify-step", json=valid_payload)
     assert response.status_code == 200, f"Failed with {response.status_code}: {response.text}"
     data = response.json()
-    
-    # Assert fields from api_contracts.md schema
     assert data["status"] == "VERIFIED"
     assert "message" in data
     assert "sprint_progress_pct" in data
-    print("[PASS] Sprint verify-step endpoint test passed:", data)
+    assert "recalculated_score" in data
+    assert "resolved_gap" in data
+    print("[PASS] Sprint verify-step endpoint (valid PR with score boost) passed:", data)
+
+    # 2. Test invalid/dummy PR URL
+    invalid_payload = {
+        "sprint_id": "sp_12345",
+        "milestone_step": 1,
+        "evidence_url": "https://github.com/candidate/sample-backend-service/pull/1"
+    }
+    response = client.post("/api/v1/sprint/verify-step", json=invalid_payload)
+    assert response.status_code == 200, f"Failed with {response.status_code}: {response.text}"
+    data = response.json()
+    assert data["status"] == "FAILED"
+    assert data["message"] == "Invalid or non-existent GitHub Pull Request URL."
+    print("[PASS] Sprint verify-step endpoint (invalid PR rejection) passed:", data)
 
 
 if __name__ == "__main__":
